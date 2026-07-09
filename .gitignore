@@ -1,6 +1,9 @@
 # Data
 data/raw/
 data/processed/
+data/CMAPSSData/raw/RUL_FD001.txt
+data/CMAPSSData/raw/test_FD001.txt
+data/CMAPSSData/raw/train_FD001.txt
 
 # Results that may become large
 results/models/
