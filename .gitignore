@@ -1,5 +1,6 @@
 # Data
 data/raw/
+!data/.gitkeep
 data/processed/
 data/CMAPSSData/raw/RUL_FD001.txt
 data/CMAPSSData/raw/test_FD001.txt
@@ -9,9 +10,12 @@ data/CMAPSSData/raw/train_FD001.txt
 results/models/
 results/checkpoints/
 
-# Python
+# Python build artifacts
 __pycache__/
 *.pyc
+*.egg-info/
+build/
+dist/
 .venv/
 venv/
 .env

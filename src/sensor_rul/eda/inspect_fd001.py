@@ -50,6 +50,58 @@ def plot_cycle_lengths(train_df, figures_dir: Path) -> None:
 
     print(f"Saved figure to: {output_path}")
 
+def plot_rul_sanity_engine_1(train_df, figures_dir: Path) -> None:
+    engine_1_df = train_df[train_df["engine_id"] == 1].copy()
+    max_cycle = engine_1_df["cycle"].max()
+    engine_1_df["rul"] = max_cycle - engine_1_df["cycle"]
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(engine_1_df["cycle"], engine_1_df["rul"])
+
+    plt.title("FD001 RUL Sanity Plot (Engine 1)")
+    plt.xlabel("cycle")
+    plt.ylabel("RUL")
+
+    plt.tight_layout()
+
+    output_path = figures_dir / "fd001_rul_engine_1.png"
+    plt.savefig(output_path, dpi=150)
+    plt.show()
+    plt.close()
+
+    print(f"Saved figure to: {output_path}")
+
+SENSOR_SCALE_GROUPS: dict[str, list[str]] = {
+    "mid500": ["sensor_2", "sensor_7", "sensor_12"],
+    "1400_1600": ["sensor_3", "sensor_4"],
+    "tens": ["sensor_11", "sensor_15", "sensor_20", "sensor_21"],
+    "390": ["sensor_17"],
+    "8k": ["sensor_9", "sensor_14"],
+}
+
+def plot_sensor_trajectories_by_scale_group_engine_1(
+    train_df, figures_dir: Path
+) -> None:
+    engine_1_df = train_df[train_df["engine_id"] == 1].copy()
+
+    for group_name, sensors in SENSOR_SCALE_GROUPS.items():
+        plt.figure(figsize=(10, 5))
+        for sensor_name in sensors:
+            plt.plot(engine_1_df["cycle"], engine_1_df[sensor_name], label=sensor_name)
+
+        plt.title(f"FD001 Sensor Trajectories - {group_name} scale (Engine 1)")
+        plt.xlabel("cycle")
+        plt.ylabel("sensor value")
+        plt.legend()
+        plt.tight_layout()
+
+        output_path = figures_dir / f"fd001_sensor_group_{group_name}_engine_1.png"
+        plt.savefig(output_path, dpi=150)
+        plt.show()
+        plt.close()
+
+        print(f"Saved figure to: {output_path}")
+
 def main() -> None:
     project_root = Path(__file__).resolve().parents[3]
     data_dir = project_root / "data" / "cmapss-data" /  "raw" 
@@ -61,6 +113,8 @@ def main() -> None:
 
     print_basic_summary(train_df, test_df, rul_df)
     plot_cycle_lengths(train_df, figures_dir)
+    plot_rul_sanity_engine_1(train_df, figures_dir)
+    plot_sensor_trajectories_by_scale_group_engine_1(train_df, figures_dir)
 
 if __name__ == "__main__":
     main()
