@@ -3,11 +3,12 @@ from pathlib import Path
 
 import pandas as pd
 
-columns = (
-    ['engine_id', 'cycle']
-    + [f'op_setting_{i}' for i in range(1, 4)]
-    + [f'sensor_{i}' for i in range(1, 22)]
-)
+ID_COLUMNS = ["engine_id", "cycle"]
+OP_SETTING_COLUMNS = [f"op_setting_{i}" for i in range(1, 4)]
+SENSOR_COLUMNS = [f"sensor_{i}" for i in range(1, 22)]
+TARGET_COLUMN = "rul"
+
+CMAPSS_COLUMNS = ID_COLUMNS + OP_SETTING_COLUMNS + SENSOR_COLUMNS
 
 
 def read_cmapss_file(path) -> pd.DataFrame:
@@ -16,7 +17,7 @@ def read_cmapss_file(path) -> pd.DataFrame:
 
     The raw files have no header row and are separated by whitespace.
     """
-    df = pd.read_csv(path, header=None, sep=r'\s+', names=columns)
+    df = pd.read_csv(path, header=None, sep=r'\s+', names=CMAPSS_COLUMNS)
     return df
 
 def add_train_rul(train_df: pd.DataFrame) -> pd.DataFrame:
@@ -30,7 +31,7 @@ def add_train_rul(train_df: pd.DataFrame) -> pd.DataFrame:
 
     final_cycle_of_engine = df_train_rul.groupby("engine_id")["cycle"].transform("max")
 
-    df_train_rul["rul"] = final_cycle_of_engine - df_train_rul["cycle"]
+    df_train_rul[TARGET_COLUMN] = final_cycle_of_engine - df_train_rul["cycle"]
 
     return df_train_rul
 

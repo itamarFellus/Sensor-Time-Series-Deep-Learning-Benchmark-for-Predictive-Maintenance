@@ -102,10 +102,37 @@ def plot_sensor_trajectories_by_scale_group_engine_1(
 
         print(f"Saved figure to: {output_path}")
 
+def save_sensor_mean_std_table(train_df, tables_dir: Path) -> None:
+    sensor_columns = [col for col in train_df.columns if col.startswith("sensor_")]
+
+    tables_dir.mkdir(parents=True, exist_ok=True)
+
+    stats_df = train_df[sensor_columns].agg(["mean", "std"]).T
+    stats_df.columns = ["mean", "std"]
+    stats_df.index.name = "sensor"
+
+    lines = [
+        "# FD001 Sensor Mean and Std",
+        "",
+        "Statistics computed on the training set.",
+        "",
+        "| Sensor | Mean | Std |",
+        "| --- | ---: | ---: |",
+    ]
+    for sensor, row in stats_df.iterrows():
+        lines.append(f"| {sensor} | {row['mean']:.4f} | {row['std']:.4f} |")
+    lines.append("")
+
+    output_path = tables_dir / "fd001_sensor_mean_std.md"
+    output_path.write_text("\n".join(lines), encoding="utf-8")
+
+    print(f"Saved table to: {output_path}")
+
 def main() -> None:
     project_root = Path(__file__).resolve().parents[3]
     data_dir = project_root / "data" / "cmapss-data" /  "raw" 
     figures_dir = project_root / "results" / "figures"
+    tables_dir = project_root / "results" / "tables"
 
     figures_dir.mkdir(parents=True, exist_ok=True)
 
@@ -115,6 +142,7 @@ def main() -> None:
     plot_cycle_lengths(train_df, figures_dir)
     plot_rul_sanity_engine_1(train_df, figures_dir)
     plot_sensor_trajectories_by_scale_group_engine_1(train_df, figures_dir)
+    save_sensor_mean_std_table(train_df, tables_dir)
 
 if __name__ == "__main__":
     main()
