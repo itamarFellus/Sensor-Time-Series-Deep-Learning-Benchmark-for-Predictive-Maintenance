@@ -20,6 +20,9 @@ dist/
 venv/
 .env
 
+# Local temp scripts
+src/temp_normalization_comparison.py
+
 # Notebooks
 .ipynb_checkpoints/
 
