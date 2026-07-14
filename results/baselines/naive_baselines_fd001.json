@@ -1,0 +1,20 @@
+[
+  {
+    "model": "mean_rul",
+    "strategy": "mean",
+    "constant_prediction": 96.43910217285156,
+    "train_rmse": 63.75551986694336,
+    "train_mae": 51.993560791015625,
+    "val_rmse": 53.326576232910156,
+    "val_mae": 45.03880310058594
+  },
+  {
+    "model": "median_rul",
+    "strategy": "median",
+    "constant_prediction": 90.0,
+    "train_rmse": 64.0798568725586,
+    "train_mae": 51.753440856933594,
+    "val_rmse": 52.20613479614258,
+    "val_mae": 44.099021911621094
+  }
+]

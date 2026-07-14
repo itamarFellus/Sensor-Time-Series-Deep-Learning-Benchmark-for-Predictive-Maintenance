@@ -6,3 +6,4 @@
 - Inspect relevant files before editing. After editing, run the narrowest available check and report what changed and what was not tested.
 - Ask before adding dependencies, changing public interfaces, or reorganizing files.
 - Briefly explain non-obvious logic, assumptions, and tensor/DataFrame shapes so the code remains reviewable.
+- Reuse code whenever possible
