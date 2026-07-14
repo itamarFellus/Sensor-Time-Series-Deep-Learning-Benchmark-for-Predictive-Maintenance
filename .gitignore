@@ -22,6 +22,7 @@ venv/
 .env
 
 # Local temp scripts
+scripts/
 src/temp_normalization_comparison.py
 
 # Notebooks
