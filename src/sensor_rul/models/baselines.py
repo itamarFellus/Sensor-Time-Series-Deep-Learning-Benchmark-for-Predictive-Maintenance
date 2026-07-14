@@ -1,5 +1,6 @@
+from __future__ import annotations
 import numpy as np
-
+from sklearn.linear_model import LinearRegression
 
 class ConstantRULBaseline:
     """Baseline that always predicts a constant RUL value."""
@@ -26,3 +27,19 @@ class ConstantRULBaseline:
             raise RuntimeError("Model must be fitted before calling predict().")
 
         return np.full(shape=num_samples, fill_value=self.constant_, dtype=np.float32)
+
+
+class CycleOnlyBaseline:
+    """Linear regression baseline using only the final cycle of each window."""
+
+    def __init__(self) -> None:
+        self.model = LinearRegression()
+
+    def fit(self, cycles: np.ndarray, y: np.ndarray) -> "CycleOnlyBaseline":
+        cycles = cycles.reshape(-1, 1)
+        self.model.fit(cycles, y)
+        return self
+
+    def predict(self, cycles: np.ndarray) -> np.ndarray:
+        cycles = cycles.reshape(-1, 1)
+        return self.model.predict(cycles)
