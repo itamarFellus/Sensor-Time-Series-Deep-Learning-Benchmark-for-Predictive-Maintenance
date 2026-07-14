@@ -1,4 +1,3 @@
-#%%
 from pathlib import Path
 
 import pandas as pd
@@ -75,6 +74,3 @@ def load_fd001(data_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame
     train_df = add_train_rul(train_df)
 
     return train_df, test_df, test_rul_df
-
-#%
-# %%

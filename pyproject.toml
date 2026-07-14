@@ -7,7 +7,9 @@ name = "sensor-rul"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
+    "numpy",
     "pandas",
+    "matplotlib",
 ]
 
 [tool.setuptools.packages.find]

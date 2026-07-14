@@ -18,12 +18,12 @@ def split_engine_ids(
     if "engine_id" not in df.columns:
         raise ValueError("DataFrame must contain an 'engine_id' column.")
 
-    engine_ids = df["engine_id"].unique() # Make sure you understand this line
+    engine_ids = df["engine_id"].unique() 
 
     rng = np.random.default_rng(seed)
     shuffled_engine_ids = rng.permutation(engine_ids)
 
-    num_val = int(round(len(shuffled_engine_ids) * val_fraction)) # Make sure you understand this line
+    num_val = int(round(len(shuffled_engine_ids) * val_fraction)) 
 
     val_engine_ids = shuffled_engine_ids[:num_val]
     train_engine_ids = shuffled_engine_ids[num_val:]
