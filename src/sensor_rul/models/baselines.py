@@ -1,6 +1,6 @@
 from __future__ import annotations
 import numpy as np
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Ridge
 
 class ConstantRULBaseline:
     """Baseline that always predicts a constant RUL value."""
@@ -43,3 +43,19 @@ class CycleOnlyBaseline:
     def predict(self, cycles: np.ndarray) -> np.ndarray:
         cycles = cycles.reshape(-1, 1)
         return self.model.predict(cycles)
+
+
+class FlattenedWindowRidgeBaseline:
+    """Ridge regression baseline on flattened time-series windows."""
+
+    def __init__(self) -> None:
+        self.model = Ridge()
+
+    def fit(self, windows: np.ndarray, y: np.ndarray) -> "FlattenedWindowRidgeBaseline":
+        X = windows.reshape(windows.shape[0], -1)
+        self.model.fit(X, y)
+        return self
+
+    def predict(self, windows: np.ndarray) -> np.ndarray:
+        X = windows.reshape(windows.shape[0], -1)
+        return self.model.predict(X)

@@ -1,0 +1,14 @@
+[
+  {
+    "model": "ridge",
+    "alpha": 1.0,
+    "window_size": 30,
+    "stride": 1,
+    "num_features": 24,
+    "flattened_dim": 720,
+    "train_rmse": 36.141395568847656,
+    "train_mae": 26.897205352783203,
+    "val_rmse": 31.25205421447754,
+    "val_mae": 25.553787231445312
+  }
+]

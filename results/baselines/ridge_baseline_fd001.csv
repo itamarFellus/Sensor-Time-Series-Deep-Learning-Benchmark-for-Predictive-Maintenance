@@ -1,0 +1,2 @@
+model,alpha,window_size,stride,num_features,flattened_dim,train_rmse,train_mae,val_rmse,val_mae
+ridge,1.0,30,1,24,720,36.141395568847656,26.897205352783203,31.25205421447754,25.553787231445312

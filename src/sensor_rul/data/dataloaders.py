@@ -9,7 +9,7 @@ def create_dataloaders(
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=False,
         drop_last=False,
     )
 
