@@ -1,0 +1,18 @@
+[
+  {
+    "model": "mlp",
+    "window_size": 30,
+    "stride": 1,
+    "num_features": 24,
+    "hidden_dim": 64,
+    "batch_size": 256,
+    "epochs": 50,
+    "lr": 0.001,
+    "seed": 42,
+    "flattened_dim": 720,
+    "train_rmse": 32.90156173706055,
+    "train_mae": 22.8513126373291,
+    "val_rmse": 25.73598861694336,
+    "val_mae": 19.273906707763672
+  }
+]
