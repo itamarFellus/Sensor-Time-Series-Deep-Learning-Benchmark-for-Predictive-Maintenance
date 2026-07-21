@@ -1,0 +1,18 @@
+[
+  {
+    "model": "gru",
+    "window_size": 30,
+    "stride": 1,
+    "num_features": 24,
+    "hidden_dim": 64,
+    "num_layers": 1,
+    "batch_size": 256,
+    "epochs": 2,
+    "lr": 0.001,
+    "seed": 42,
+    "train_rmse": 105.8560562133789,
+    "train_mae": 85.42456817626953,
+    "val_rmse": 88.83570098876953,
+    "val_mae": 73.1957015991211
+  }
+]

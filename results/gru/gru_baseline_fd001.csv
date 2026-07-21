@@ -1,0 +1,2 @@
+model,window_size,stride,num_features,hidden_dim,num_layers,batch_size,epochs,lr,seed,device,train_rmse,train_mae,val_rmse,val_mae
+gru,30,1,24,64,1,256,50,0.001,42,cpu,36.109954833984375,20.91155242919922,24.62567138671875,17.04780387878418
