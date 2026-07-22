@@ -1,0 +1,2 @@
+model,window_size,stride,num_features,hidden_dim,num_layers,batch_size,epochs,lr,seed,device,rul_cap,target_type,train_rmse,train_mae,val_rmse,val_mae
+gru,30,1,24,64,1,256,50,0.001,42,cuda,125.0,capped_125,13.41557502746582,10.819977760314941,15.63780403137207,12.21384334564209

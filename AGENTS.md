@@ -8,3 +8,4 @@
 - Briefly explain non-obvious logic, assumptions, and tensor/DataFrame shapes so the code remains reviewable.
 - Reuse code whenever possible
 - Do not install anything without my permission.
+- Write the code simple and minimal.

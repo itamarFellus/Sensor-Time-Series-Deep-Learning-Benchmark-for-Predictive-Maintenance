@@ -1,0 +1,2 @@
+model,window_size,stride,num_features,hidden_dim,batch_size,epochs,lr,seed,rul_cap,target_type,flattened_dim,train_rmse,train_mae,val_rmse,val_mae
+mlp,30,1,24,64,256,50,0.001,42,125.0,capped_125,720,16.748281478881836,12.542713165283203,17.826675415039062,13.103272438049316

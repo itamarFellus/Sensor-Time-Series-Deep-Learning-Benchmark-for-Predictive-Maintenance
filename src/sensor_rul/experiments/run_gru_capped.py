@@ -1,4 +1,4 @@
-"""Run flattened-window MLP RUL baseline on FD001."""
+"""Run sequence-window GRU RUL experiment on FD001 with optional capped targets."""
 from __future__ import annotations
 
 import argparse
@@ -24,11 +24,10 @@ from sensor_rul.data.splits import (
     split_by_engine_ids,
     split_engine_ids,
 )
-
 from sensor_rul.data.targets import cap_rul_labels
 from sensor_rul.data.windowing import make_windows
 from sensor_rul.evaluation.metrics import mae, rmse
-from sensor_rul.models.mlp import MLP
+from sensor_rul.models.recurrent import GRURULRegressor
 from sensor_rul.training.train_regressor import fit_regressor
 from sensor_rul.visualization.rul_diagnostics import (
     plot_engine_trajectories,
@@ -40,7 +39,7 @@ from sensor_rul.visualization.rul_diagnostics import (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run flattened-window MLP RUL baseline on FD001."
+        description="Run sequence-window GRU RUL on FD001 with optional capped targets."
     )
     parser.add_argument(
         "--data-dir",
@@ -51,8 +50,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--results-dir",
         type=Path,
-        default=PROJECT_ROOT / "results" / "baselines",
-        help="Directory for baseline result files.",
+        default=PROJECT_ROOT / "results" / "gru_capped",
+        help="Directory for result files.",
     )
     parser.add_argument(
         "--window-size",
@@ -70,7 +69,13 @@ def parse_args() -> argparse.Namespace:
         "--hidden-dim",
         type=int,
         default=64,
-        help="Hidden layer width for the MLP.",
+        help="GRU hidden state size.",
+    )
+    parser.add_argument(
+        "--num-layers",
+        type=int,
+        default=1,
+        help="Number of stacked GRU layers.",
     )
     parser.add_argument(
         "--batch-size",
@@ -152,11 +157,12 @@ def print_summary(
     plots_dir: Path,
     plot_prefix: str,
 ) -> None:
-    print("Flattened-window MLP RUL baseline (FD001)")
+    print("Sequence-window GRU RUL with optional capped targets (FD001)")
     print(f"  data dir:       {args.data_dir}")
     print(f"  window size:    {args.window_size}")
     print(f"  stride:         {args.stride}")
     print(f"  hidden dim:     {args.hidden_dim}")
+    print(f"  num layers:     {args.num_layers}")
     print(f"  batch size:     {args.batch_size}")
     print(f"  epochs:         {args.epochs}")
     print(f"  lr:             {args.lr}")
@@ -169,7 +175,6 @@ def print_summary(
     print(f"  val windows:    {len(y_val)}")
     print()
     print(f"  num features:   {result['num_features']}")
-    print(f"  flattened dim:  {result['flattened_dim']}")
     print()
     print(
         f"{'model':<12} {'train_rmse':>12} {'train_mae':>11} "
@@ -253,12 +258,16 @@ def main() -> None:
     )
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
 
-    model = MLP(
-        window_size=args.window_size,
+    model = GRURULRegressor(
         num_features=num_features,
         hidden_dim=args.hidden_dim,
+        num_layers=args.num_layers,
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device.type == "cuda":
+        print(f"Using GPU: {torch.cuda.get_device_name(device)}")
+    else:
+        print("Using CPU")
     model, history = fit_regressor(
         model,
         train_loader,
@@ -295,26 +304,27 @@ def main() -> None:
     )
     predictions_df = pd.concat([train_predictions, val_predictions], ignore_index=True)
 
-    result: dict[str, float | str | int] = {
-        "model": "mlp",
+    result: dict[str, float | str | int | None] = {
+        "model": "gru",
         "window_size": args.window_size,
         "stride": args.stride,
         "num_features": num_features,
         "hidden_dim": args.hidden_dim,
+        "num_layers": args.num_layers,
         "batch_size": args.batch_size,
         "epochs": args.epochs,
         "lr": args.lr,
         "seed": args.seed,
+        "device": str(device),
         "rul_cap": args.rul_cap,
         "target_type": target_type,
-        "flattened_dim": int(args.window_size * num_features),
         "train_rmse": float(rmse(y_train, y_train_pred)),
         "train_mae": float(mae(y_train, y_train_pred)),
         "val_rmse": float(rmse(y_val, y_val_pred)),
         "val_mae": float(mae(y_val, y_val_pred)),
     }
 
-    output_stem = f"mlp_baseline_fd001_{target_type}"
+    output_stem = f"gru_capped_fd001_{target_type}"
     plot_prefix = output_stem
     args.results_dir.mkdir(parents=True, exist_ok=True)
     plots_dir = args.results_dir / "plots"
