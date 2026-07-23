@@ -20,14 +20,30 @@ BASELINE_ROWS: tuple[tuple[str, str, str], ...] = (
 DEEP_MODEL_ROWS: tuple[tuple[str, str, str, str], ...] = (
     ("MLP", "mlp_baseline", "mlp", "raw"),
     ("MLP", "mlp_baseline", "mlp", "capped_125"),
-    ("GRU", "gru_capped", "gru", "raw"),
+    ("GRU", "gru", "gru", "raw"),
     ("GRU", "gru_capped", "gru", "capped_125"),
+    ("LSTM", "lstm", "lstm", "raw"),
+    ("LSTM", "lstm", "lstm", "capped_125"),
 )
 
 GRU_STEM = "gru_capped"
-TARGET_TYPE_STEMS = frozenset({"mlp_baseline", GRU_STEM})
+LSTM_STEM = "lstm"
+GRU_RESULTS_STEMS = frozenset({"gru", GRU_STEM})
+TARGET_TYPE_STEMS = frozenset({"mlp_baseline", "gru", GRU_STEM, LSTM_STEM})
+
+DEFAULT_RESULT_SUFFIX = "_epochs_100"
 
 METRIC_COLUMNS = ("train_rmse", "train_mae", "val_rmse", "val_mae")
+
+
+def extract_comparison_metrics(result: dict[str, object]) -> dict[str, float]:
+    """Prefer best-epoch validation metrics when saved in result JSON."""
+    metrics = {metric: float(result[metric]) for metric in METRIC_COLUMNS}
+    if "best_val_rmse" in result:
+        metrics["val_rmse"] = float(result["best_val_rmse"])
+    if "best_val_mae" in result:
+        metrics["val_mae"] = float(result["best_val_mae"])
+    return metrics
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,6 +63,12 @@ def parse_args() -> argparse.Namespace:
         help="Directory containing GRU result JSON files.",
     )
     parser.add_argument(
+        "--lstm-results-dir",
+        type=Path,
+        default=PROJECT_ROOT / "results" / "lstm",
+        help="Directory containing LSTM result JSON files.",
+    )
+    parser.add_argument(
         "--tables-dir",
         type=Path,
         default=PROJECT_ROOT / "results" / "tables",
@@ -57,6 +79,12 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="fd001",
         help="Dataset suffix used in result filenames.",
+    )
+    parser.add_argument(
+        "--result-suffix",
+        type=str,
+        default=DEFAULT_RESULT_SUFFIX,
+        help="Result filename suffix, e.g. _epochs_100.",
     )
     return parser.parse_args()
 
@@ -79,24 +107,28 @@ def result_path(
     stem: str,
     dataset: str,
     target_type: str = "raw",
+    result_suffix: str = "",
 ) -> Path:
     candidates: list[Path] = []
 
     if stem in TARGET_TYPE_STEMS:
-        candidates.append(results_dir / f"{stem}_{dataset}_{target_type}.json")
-
-    candidates.extend(
-        (
-            results_dir / f"{stem}_{dataset}.json",
-            results_dir / f"{stem}_{dataset}_raw.json",
+        candidates.append(
+            results_dir / f"{stem}_{dataset}_{target_type}{result_suffix}.json"
         )
-    )
 
-    if stem == GRU_STEM:
+    if target_type == "raw":
         candidates.extend(
             (
-                results_dir / f"gru_{dataset}.json",
-                results_dir / f"gru_{dataset}_raw.json",
+                results_dir / f"{stem}_{dataset}{result_suffix}.json",
+                results_dir / f"{stem}_{dataset}_raw{result_suffix}.json",
+            )
+        )
+
+    if stem == GRU_STEM and target_type == "raw":
+        candidates.extend(
+            (
+                results_dir / f"gru_{dataset}{result_suffix}.json",
+                results_dir / f"gru_{dataset}_raw{result_suffix}.json",
             )
         )
 
@@ -121,10 +153,25 @@ def find_result_by_model(
     )
 
 
+def results_dir_for_stem(
+    stem: str,
+    baselines_dir: Path,
+    gru_results_dir: Path,
+    lstm_results_dir: Path,
+) -> Path:
+    if stem in GRU_RESULTS_STEMS:
+        return gru_results_dir
+    if stem == LSTM_STEM:
+        return lstm_results_dir
+    return baselines_dir
+
+
 def build_comparison_table(
     baselines_dir: Path,
     gru_results_dir: Path,
+    lstm_results_dir: Path,
     dataset: str,
+    result_suffix: str = "",
 ) -> pd.DataFrame:
     loaded_files: dict[str, list[dict[str, object]]] = {}
 
@@ -132,10 +179,13 @@ def build_comparison_table(
         stem: str,
         results_dir: Path,
         target_type: str,
+        suffix: str,
     ) -> list[dict[str, object]]:
-        cache_key = f"{results_dir}:{stem}:{target_type}"
+        cache_key = f"{results_dir}:{stem}:{target_type}:{suffix}"
         if cache_key not in loaded_files:
-            path = result_path(results_dir, stem, dataset, target_type)
+            path = result_path(
+                results_dir, stem, dataset, target_type, suffix
+            )
             loaded_files[cache_key] = load_results_json(path)
         return loaded_files[cache_key]
 
@@ -145,28 +195,35 @@ def build_comparison_table(
         stem: str,
         model_key: str,
         target_type: str,
+        *,
+        use_result_suffix: bool = True,
     ) -> None:
-        results_dir = gru_results_dir if stem == GRU_STEM else baselines_dir
-        source_path = result_path(results_dir, stem, dataset, target_type)
+        suffix = result_suffix if use_result_suffix else ""
+        results_dir = results_dir_for_stem(
+            stem, baselines_dir, gru_results_dir, lstm_results_dir
+        )
+        source_path = result_path(
+            results_dir, stem, dataset, target_type, suffix
+        )
+        if not source_path.is_file():
+            return
         result = find_result_by_model(
-            get_results(stem, results_dir, target_type),
+            get_results(stem, results_dir, target_type, suffix),
             model_key,
             source_path,
         )
 
         row: dict[str, object] = {"model": display_name, "target": target_type}
+        metrics = extract_comparison_metrics(result)
         for metric in METRIC_COLUMNS:
-            if metric not in result:
-                raise KeyError(
-                    f"Metric '{metric}' missing for model '{model_key}' "
-                    f"in {source_path.name}"
-                )
-            row[metric] = float(result[metric])
+            row[metric] = metrics[metric]
         rows.append(row)
 
     rows: list[dict[str, object]] = []
     for display_name, stem, model_key in BASELINE_ROWS:
-        append_row(rows, display_name, stem, model_key, "raw")
+        append_row(
+            rows, display_name, stem, model_key, "raw", use_result_suffix=False
+        )
 
     for display_name, stem, model_key, target_type in DEEP_MODEL_ROWS:
         append_row(rows, display_name, stem, model_key, target_type)
@@ -178,7 +235,8 @@ def comparison_table_to_markdown(df: pd.DataFrame, dataset: str) -> str:
     lines = [
         f"# {dataset.upper()} Model Comparison",
         "",
-        "Validation metrics from saved experiment result files.",
+        "Validation metrics from saved experiment result files. "
+        "Deep models use best-epoch validation metrics when available.",
         "",
         "| Model | Target | Train RMSE | Train MAE | Val RMSE | Val MAE |",
         "| --- | --- | ---: | ---: | ---: | ---: |",
@@ -196,11 +254,17 @@ def save_comparison_table(
     df: pd.DataFrame,
     tables_dir: Path,
     dataset: str,
+    result_suffix: str = "",
 ) -> tuple[Path, Path]:
     tables_dir.mkdir(parents=True, exist_ok=True)
 
-    csv_path = tables_dir / f"model_comparison_{dataset}.csv"
-    md_path = tables_dir / f"model_comparison_{dataset}.md"
+    output_suffix = result_suffix.lstrip("_")
+    output_stem = f"model_comparison_{dataset}"
+    if output_suffix:
+        output_stem = f"{output_stem}_{output_suffix}"
+
+    csv_path = tables_dir / f"{output_stem}.csv"
+    md_path = tables_dir / f"{output_stem}.md"
 
     df.to_csv(csv_path, index=False)
     md_path.write_text(
@@ -235,12 +299,15 @@ def main() -> None:
     comparison_df = build_comparison_table(
         baselines_dir=args.baselines_dir,
         gru_results_dir=args.gru_results_dir,
+        lstm_results_dir=args.lstm_results_dir,
         dataset=args.dataset,
+        result_suffix=args.result_suffix,
     )
     csv_path, md_path = save_comparison_table(
         comparison_df,
         tables_dir=args.tables_dir,
         dataset=args.dataset,
+        result_suffix=args.result_suffix,
     )
     print_summary(comparison_df, csv_path, md_path)
 

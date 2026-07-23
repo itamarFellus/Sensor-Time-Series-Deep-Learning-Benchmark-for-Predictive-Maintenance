@@ -1,4 +1,4 @@
-"""Run sequence-window GRU RUL baseline on FD001."""
+"""Run sequence-window LSTM RUL experiment on FD001 with optional capped targets."""
 from __future__ import annotations
 
 import argparse
@@ -24,9 +24,10 @@ from sensor_rul.data.splits import (
     split_by_engine_ids,
     split_engine_ids,
 )
+from sensor_rul.data.targets import cap_rul_labels
 from sensor_rul.data.windowing import make_windows
 from sensor_rul.evaluation.metrics import mae, rmse
-from sensor_rul.models.recurrent import GRURULRegressor
+from sensor_rul.models.lstm import LSTMRULRegressor
 from sensor_rul.training.train_regressor import (
     DEFAULT_EARLY_STOPPING_MIN_DELTA,
     DEFAULT_EARLY_STOPPING_PATIENCE,
@@ -42,7 +43,7 @@ from sensor_rul.visualization.rul_diagnostics import (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run sequence-window GRU RUL baseline on FD001."
+        description="Run sequence-window LSTM RUL on FD001 with optional capped targets."
     )
     parser.add_argument(
         "--data-dir",
@@ -53,8 +54,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--results-dir",
         type=Path,
-        default=PROJECT_ROOT / "results" / "gru",
-        help="Directory for baseline result files.",
+        default=PROJECT_ROOT / "results" / "lstm",
+        help="Directory for result files.",
     )
     parser.add_argument(
         "--window-size",
@@ -72,13 +73,13 @@ def parse_args() -> argparse.Namespace:
         "--hidden-dim",
         type=int,
         default=64,
-        help="GRU hidden state size.",
+        help="LSTM hidden state size.",
     )
     parser.add_argument(
         "--num-layers",
         type=int,
         default=1,
-        help="Number of stacked GRU layers.",
+        help="Number of stacked LSTM layers.",
     )
     parser.add_argument(
         "--batch-size",
@@ -109,6 +110,18 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=42,
         help="Random seed for reproducibility.",
+    )
+    parser.add_argument(
+        "--rul-cap",
+        type=float,
+        default=None,
+        help="Optional maximum RUL target value. Example: 125.",
+    )
+    parser.add_argument(
+        "--grad-clip-max-norm",
+        type=float,
+        default=1.0,
+        help="Maximum gradient norm for clipping during training.",
     )
     parser.add_argument(
         "--early-stopping",
@@ -169,7 +182,7 @@ def print_summary(
     val_engine_ids: np.ndarray,
     y_train: np.ndarray,
     y_val: np.ndarray,
-    result: dict[str, float | str | int | bool],
+    result: dict[str, float | str | int | bool | None],
     csv_path: Path,
     json_path: Path,
     history_path: Path,
@@ -178,7 +191,7 @@ def print_summary(
     plots_dir: Path,
     plot_prefix: str,
 ) -> None:
-    print("Sequence-window GRU RUL baseline (FD001)")
+    print("Sequence-window LSTM RUL (FD001)")
     print(f"  data dir:       {args.data_dir}")
     print(f"  window size:    {args.window_size}")
     print(f"  stride:         {args.stride}")
@@ -187,6 +200,7 @@ def print_summary(
     print(f"  batch size:     {args.batch_size}")
     print(f"  epochs:         {args.epochs}")
     print(f"  lr:             {args.lr}")
+    print(f"  grad clip:      {args.grad_clip_max_norm}")
     print(f"  early stopping: {args.early_stopping}")
     print(f"  early patience: {args.early_stop_patience}")
     print(f"  early min delta: {args.early_stop_min_delta}")
@@ -195,6 +209,7 @@ def print_summary(
     print(f"  best epoch:     {result['best_epoch']}")
     print(f"  val fraction:   {args.val_fraction}")
     print(f"  seed:           {args.seed}")
+    print(f"  rul cap:        {args.rul_cap}")
     print(f"  train engines:  {len(train_engine_ids)}")
     print(f"  val engines:    {len(val_engine_ids)}")
     print(f"  train windows:  {len(y_train)}")
@@ -228,6 +243,7 @@ def main() -> None:
     set_seed(args.seed)
     feature_columns = list(DEFAULT_FEATURE_COLUMNS)
     num_features = len(feature_columns)
+    target_type = "raw" if args.rul_cap is None else f"capped_{int(args.rul_cap)}"
 
     train_df, _, _ = load_fd001(args.data_dir)
     train_engine_ids, val_engine_ids = split_engine_ids(
@@ -258,9 +274,12 @@ def main() -> None:
     )
 
     x_train = train_windows.windows
-    y_train = train_windows.labels
+    y_train_raw = train_windows.labels
     x_val = val_windows.windows
-    y_val = val_windows.labels
+    y_val_raw = val_windows.labels
+
+    y_train = cap_rul_labels(y_train_raw, args.rul_cap)
+    y_val = cap_rul_labels(y_val_raw, args.rul_cap)
 
     train_dataset = TensorDataset(
         torch.from_numpy(x_train).float(),
@@ -281,7 +300,7 @@ def main() -> None:
     )
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
 
-    model = GRURULRegressor(
+    model = LSTMRULRegressor(
         num_features=num_features,
         hidden_dim=args.hidden_dim,
         num_layers=args.num_layers,
@@ -291,6 +310,7 @@ def main() -> None:
         print(f"Using GPU: {torch.cuda.get_device_name(device)}")
     else:
         print("Using CPU")
+    print(f"grad_clip_max_norm: {args.grad_clip_max_norm}")
     model, history = fit_regressor(
         model,
         train_loader,
@@ -298,7 +318,7 @@ def main() -> None:
         epochs=args.epochs,
         lr=args.lr,
         device=device,
-        grad_clip_max_norm=1.0,
+        grad_clip_max_norm=args.grad_clip_max_norm,
         early_stopping_patience=(
             args.early_stop_patience if args.early_stopping else None
         ),
@@ -317,6 +337,7 @@ def main() -> None:
             "split": "train",
             "engine_id": train_windows.engine_ids,
             "end_cycle": train_windows.end_cycles,
+            "true_rul_raw": y_train_raw,
             "true_rul": y_train,
             "pred_rul": y_train_pred,
             "error": y_train_pred - y_train,
@@ -327,6 +348,7 @@ def main() -> None:
             "split": "val",
             "engine_id": val_windows.engine_ids,
             "end_cycle": val_windows.end_cycles,
+            "true_rul_raw": y_val_raw,
             "true_rul": y_val,
             "pred_rul": y_val_pred,
             "error": y_val_pred - y_val,
@@ -334,8 +356,8 @@ def main() -> None:
     )
     predictions_df = pd.concat([train_predictions, val_predictions], ignore_index=True)
 
-    result: dict[str, float | str | int | bool] = {
-        "model": "gru",
+    result: dict[str, float | str | int | bool | None] = {
+        "model": "lstm",
         "window_size": args.window_size,
         "stride": args.stride,
         "num_features": num_features,
@@ -344,6 +366,7 @@ def main() -> None:
         "batch_size": args.batch_size,
         "epochs": args.epochs,
         "lr": args.lr,
+        "grad_clip_max_norm": args.grad_clip_max_norm,
         "early_stopping": args.early_stopping,
         "early_stopping_patience": args.early_stop_patience,
         "early_stopping_min_delta": args.early_stop_min_delta,
@@ -354,21 +377,24 @@ def main() -> None:
         "best_val_mae": float(best_row["val_mae"]),
         "seed": args.seed,
         "device": str(device),
+        "rul_cap": args.rul_cap,
+        "target_type": target_type,
         "train_rmse": float(rmse(y_train, y_train_pred)),
         "train_mae": float(mae(y_train, y_train_pred)),
         "val_rmse": float(rmse(y_val, y_val_pred)),
         "val_mae": float(mae(y_val, y_val_pred)),
     }
 
-    plot_prefix = "gru_fd001"
+    output_stem = f"lstm_fd001_{target_type}"
+    plot_prefix = output_stem
     args.results_dir.mkdir(parents=True, exist_ok=True)
     plots_dir = args.results_dir / "plots"
-    csv_path = args.results_dir / "gru_fd001.csv"
-    json_path = args.results_dir / "gru_fd001.json"
-    history_path = args.results_dir / "gru_fd001_history.json"
-    history_csv_path = args.results_dir / "gru_fd001_history.csv"
-    predictions_path = args.results_dir / "gru_fd001_predictions.csv"
-    checkpoint_path = args.results_dir / "gru_fd001.pt"
+    csv_path = args.results_dir / f"{output_stem}.csv"
+    json_path = args.results_dir / f"{output_stem}.json"
+    history_path = args.results_dir / f"{output_stem}_history.json"
+    history_csv_path = args.results_dir / f"{output_stem}_history.csv"
+    predictions_path = args.results_dir / f"{output_stem}_predictions.csv"
+    checkpoint_path = args.results_dir / f"{output_stem}.pt"
     torch.save(model.state_dict(), checkpoint_path)
     result["checkpoint_path"] = str(checkpoint_path)
 

@@ -275,6 +275,7 @@ def main() -> None:
         epochs=args.epochs,
         lr=args.lr,
         device=device,
+        grad_clip_max_norm=1.0,
     )
 
     y_train_pred = predict_loader(model, train_eval_loader, device)

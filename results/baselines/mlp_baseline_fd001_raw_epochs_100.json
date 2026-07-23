@@ -1,0 +1,29 @@
+[
+  {
+    "model": "mlp",
+    "window_size": 30,
+    "stride": 1,
+    "num_features": 24,
+    "hidden_dim": 64,
+    "batch_size": 256,
+    "epochs": 100,
+    "lr": 0.001,
+    "early_stopping": true,
+    "early_stopping_patience": 15,
+    "early_stopping_min_delta": 0.1,
+    "restore_best": true,
+    "trained_epochs": 86,
+    "best_epoch": 71,
+    "best_val_rmse": 23.856833740970764,
+    "best_val_mae": 18.014786027754432,
+    "seed": 42,
+    "rul_cap": null,
+    "target_type": "raw",
+    "flattened_dim": 720,
+    "train_rmse": 30.897201538085938,
+    "train_mae": 21.017314910888672,
+    "val_rmse": 23.856834411621094,
+    "val_mae": 18.014787673950195,
+    "checkpoint_path": "C:\\learning\\Projects\\Sensor Time-Series Deep Learning Benchmark for Predictive Maintenance\\results\\baselines\\mlp_baseline_fd001_raw.pt"
+  }
+]

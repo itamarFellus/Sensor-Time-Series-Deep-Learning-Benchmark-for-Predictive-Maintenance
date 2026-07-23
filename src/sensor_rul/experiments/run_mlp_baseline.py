@@ -29,7 +29,11 @@ from sensor_rul.data.targets import cap_rul_labels
 from sensor_rul.data.windowing import make_windows
 from sensor_rul.evaluation.metrics import mae, rmse
 from sensor_rul.models.mlp import MLP
-from sensor_rul.training.train_regressor import fit_regressor
+from sensor_rul.training.train_regressor import (
+    DEFAULT_EARLY_STOPPING_MIN_DELTA,
+    DEFAULT_EARLY_STOPPING_PATIENCE,
+    fit_regressor,
+)
 from sensor_rul.visualization.rul_diagnostics import (
     plot_engine_trajectories,
     plot_error_vs_true_rul,
@@ -108,6 +112,30 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional maximum RUL target value. Example: 125.",
     )
+    parser.add_argument(
+        "--early-stopping",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable early stopping on validation RMSE.",
+    )
+    parser.add_argument(
+        "--early-stop-patience",
+        type=int,
+        default=DEFAULT_EARLY_STOPPING_PATIENCE,
+        help="Number of epochs without meaningful validation RMSE improvement before stopping.",
+    )
+    parser.add_argument(
+        "--early-stop-min-delta",
+        type=float,
+        default=DEFAULT_EARLY_STOPPING_MIN_DELTA,
+        help="Minimum validation RMSE improvement required to reset early-stopping patience.",
+    )
+    parser.add_argument(
+        "--restore-best",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Restore the best validation checkpoint before final prediction/evaluation.",
+    )
     return parser.parse_args()
 
 
@@ -143,7 +171,7 @@ def print_summary(
     val_engine_ids: np.ndarray,
     y_train: np.ndarray,
     y_val: np.ndarray,
-    result: dict[str, float | str | int | None],
+    result: dict[str, float | str | int | bool | None],
     csv_path: Path,
     json_path: Path,
     history_path: Path,
@@ -160,6 +188,12 @@ def print_summary(
     print(f"  batch size:     {args.batch_size}")
     print(f"  epochs:         {args.epochs}")
     print(f"  lr:             {args.lr}")
+    print(f"  early stopping: {args.early_stopping}")
+    print(f"  early patience: {args.early_stop_patience}")
+    print(f"  early min delta: {args.early_stop_min_delta}")
+    print(f"  restore best:   {args.restore_best}")
+    print(f"  trained epochs: {result['trained_epochs']}")
+    print(f"  best epoch:     {result['best_epoch']}")
     print(f"  val fraction:   {args.val_fraction}")
     print(f"  seed:           {args.seed}")
     print(f"  rul cap:        {args.rul_cap}")
@@ -186,6 +220,7 @@ def print_summary(
     print(f"Saved history JSON: {history_path}")
     print(f"Saved history CSV:  {history_csv_path}")
     print(f"Saved predictions:  {predictions_path}")
+    print(f"Saved checkpoint:   {result['checkpoint_path']}")
     print(f"Saved plots:        {plots_dir}")
     for plot_path in sorted(plots_dir.glob(f"{plot_prefix}_*.png")):
         print(f"  {plot_path}")
@@ -266,7 +301,15 @@ def main() -> None:
         epochs=args.epochs,
         lr=args.lr,
         device=device,
+        early_stopping_patience=(
+            args.early_stop_patience if args.early_stopping else None
+        ),
+        early_stopping_min_delta=args.early_stop_min_delta,
+        restore_best=args.restore_best,
     )
+
+    best_row = min(history, key=lambda row: row["val_rmse"])
+    trained_epochs = len(history)
 
     y_train_pred = predict_loader(model, train_eval_loader, device)
     y_val_pred = predict_loader(model, val_loader, device)
@@ -295,7 +338,7 @@ def main() -> None:
     )
     predictions_df = pd.concat([train_predictions, val_predictions], ignore_index=True)
 
-    result: dict[str, float | str | int] = {
+    result: dict[str, float | str | int | bool | None] = {
         "model": "mlp",
         "window_size": args.window_size,
         "stride": args.stride,
@@ -304,6 +347,14 @@ def main() -> None:
         "batch_size": args.batch_size,
         "epochs": args.epochs,
         "lr": args.lr,
+        "early_stopping": args.early_stopping,
+        "early_stopping_patience": args.early_stop_patience,
+        "early_stopping_min_delta": args.early_stop_min_delta,
+        "restore_best": args.restore_best,
+        "trained_epochs": trained_epochs,
+        "best_epoch": int(best_row["epoch"]),
+        "best_val_rmse": float(best_row["val_rmse"]),
+        "best_val_mae": float(best_row["val_mae"]),
         "seed": args.seed,
         "rul_cap": args.rul_cap,
         "target_type": target_type,
@@ -323,6 +374,9 @@ def main() -> None:
     history_path = args.results_dir / f"{output_stem}_history.json"
     history_csv_path = args.results_dir / f"{output_stem}_history.csv"
     predictions_path = args.results_dir / f"{output_stem}_predictions.csv"
+    checkpoint_path = args.results_dir / f"{output_stem}.pt"
+    torch.save(model.state_dict(), checkpoint_path)
+    result["checkpoint_path"] = str(checkpoint_path)
 
     pd.DataFrame([result]).to_csv(csv_path, index=False)
 
