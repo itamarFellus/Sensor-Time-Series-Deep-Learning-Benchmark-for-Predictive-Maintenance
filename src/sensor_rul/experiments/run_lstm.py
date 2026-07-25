@@ -90,7 +90,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--epochs",
         type=int,
-        default=50,
+        default=100,
         help="Number of training epochs.",
     )
     parser.add_argument(
@@ -385,7 +385,7 @@ def main() -> None:
         "val_mae": float(mae(y_val, y_val_pred)),
     }
 
-    output_stem = f"lstm_fd001_{target_type}"
+    output_stem = f"lstm_fd001_{target_type}_hidden_dim_{args.hidden_dim}"
     plot_prefix = output_stem
     args.results_dir.mkdir(parents=True, exist_ok=True)
     plots_dir = args.results_dir / "plots"

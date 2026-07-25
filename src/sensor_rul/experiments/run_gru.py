@@ -89,7 +89,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--epochs",
         type=int,
-        default=50,
+        default=100,
         help="Number of training epochs.",
     )
     parser.add_argument(
@@ -360,15 +360,16 @@ def main() -> None:
         "val_mae": float(mae(y_val, y_val_pred)),
     }
 
-    plot_prefix = "gru_fd001"
+    output_stem = f"gru_fd001_hidden_dim_{args.hidden_dim}"
+    plot_prefix = output_stem
     args.results_dir.mkdir(parents=True, exist_ok=True)
     plots_dir = args.results_dir / "plots"
-    csv_path = args.results_dir / "gru_fd001.csv"
-    json_path = args.results_dir / "gru_fd001.json"
-    history_path = args.results_dir / "gru_fd001_history.json"
-    history_csv_path = args.results_dir / "gru_fd001_history.csv"
-    predictions_path = args.results_dir / "gru_fd001_predictions.csv"
-    checkpoint_path = args.results_dir / "gru_fd001.pt"
+    csv_path = args.results_dir / f"{output_stem}.csv"
+    json_path = args.results_dir / f"{output_stem}.json"
+    history_path = args.results_dir / f"{output_stem}_history.json"
+    history_csv_path = args.results_dir / f"{output_stem}_history.csv"
+    predictions_path = args.results_dir / f"{output_stem}_predictions.csv"
+    checkpoint_path = args.results_dir / f"{output_stem}.pt"
     torch.save(model.state_dict(), checkpoint_path)
     result["checkpoint_path"] = str(checkpoint_path)
 

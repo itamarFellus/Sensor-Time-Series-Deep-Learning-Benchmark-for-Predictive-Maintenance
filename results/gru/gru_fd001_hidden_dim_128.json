@@ -1,0 +1,28 @@
+[
+  {
+    "model": "gru",
+    "window_size": 30,
+    "stride": 1,
+    "num_features": 24,
+    "hidden_dim": 128,
+    "num_layers": 1,
+    "batch_size": 256,
+    "epochs": 100,
+    "lr": 0.001,
+    "early_stopping": true,
+    "early_stopping_patience": 15,
+    "early_stopping_min_delta": 0.1,
+    "restore_best": true,
+    "trained_epochs": 48,
+    "best_epoch": 33,
+    "best_val_rmse": 22.88258909196003,
+    "best_val_mae": 16.07034048066454,
+    "seed": 42,
+    "device": "cuda",
+    "train_rmse": 32.28949737548828,
+    "train_mae": 19.301061630249023,
+    "val_rmse": 22.88258934020996,
+    "val_mae": 16.07033920288086,
+    "checkpoint_path": "C:\\learning\\Projects\\Sensor Time-Series Deep Learning Benchmark for Predictive Maintenance\\results\\gru\\gru_fd001_hidden_dim_128.pt"
+  }
+]

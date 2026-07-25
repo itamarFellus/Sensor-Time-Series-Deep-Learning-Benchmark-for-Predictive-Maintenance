@@ -1,0 +1,2 @@
+model,window_size,stride,num_features,hidden_dim,num_layers,batch_size,epochs,lr,early_stopping,early_stopping_patience,early_stopping_min_delta,restore_best,trained_epochs,best_epoch,best_val_rmse,best_val_mae,seed,device,train_rmse,train_mae,val_rmse,val_mae,checkpoint_path
+gru,30,1,24,128,1,256,100,0.001,True,15,0.1,True,48,33,22.88258909196003,16.07034048066454,42,cuda,32.28949737548828,19.301061630249023,22.88258934020996,16.07033920288086,C:\learning\Projects\Sensor Time-Series Deep Learning Benchmark for Predictive Maintenance\results\gru\gru_fd001_hidden_dim_128.pt
