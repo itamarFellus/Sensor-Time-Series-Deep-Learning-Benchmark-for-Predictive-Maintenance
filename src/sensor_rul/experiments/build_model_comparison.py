@@ -24,10 +24,12 @@ DEEP_MODEL_ROWS: tuple[tuple[str, str, str, str], ...] = (
     ("GRU", "gru_capped", "gru", "capped_125"),
     ("LSTM", "lstm", "lstm", "raw"),
     ("LSTM", "lstm", "lstm", "capped_125"),
+    ("CNN", "cnn", "cnn", "raw"),
 )
 
 GRU_STEM = "gru_capped"
 LSTM_STEM = "lstm"
+CNN_STEM = "cnn"
 GRU_RESULTS_STEMS = frozenset({"gru", GRU_STEM})
 TARGET_TYPE_STEMS = frozenset({"mlp_baseline", "gru", GRU_STEM, LSTM_STEM})
 
@@ -67,6 +69,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=PROJECT_ROOT / "results" / "lstm",
         help="Directory containing LSTM result JSON files.",
+    )
+    parser.add_argument(
+        "--cnn-results-dir",
+        type=Path,
+        default=PROJECT_ROOT / "results" / "cnn",
+        help="Directory containing CNN result JSON files.",
     )
     parser.add_argument(
         "--tables-dir",
@@ -158,11 +166,14 @@ def results_dir_for_stem(
     baselines_dir: Path,
     gru_results_dir: Path,
     lstm_results_dir: Path,
+    cnn_results_dir: Path,
 ) -> Path:
     if stem in GRU_RESULTS_STEMS:
         return gru_results_dir
     if stem == LSTM_STEM:
         return lstm_results_dir
+    if stem == CNN_STEM:
+        return cnn_results_dir
     return baselines_dir
 
 
@@ -170,6 +181,7 @@ def build_comparison_table(
     baselines_dir: Path,
     gru_results_dir: Path,
     lstm_results_dir: Path,
+    cnn_results_dir: Path,
     dataset: str,
     result_suffix: str = "",
 ) -> pd.DataFrame:
@@ -200,7 +212,7 @@ def build_comparison_table(
     ) -> None:
         suffix = result_suffix if use_result_suffix else ""
         results_dir = results_dir_for_stem(
-            stem, baselines_dir, gru_results_dir, lstm_results_dir
+            stem, baselines_dir, gru_results_dir, lstm_results_dir, cnn_results_dir
         )
         source_path = result_path(
             results_dir, stem, dataset, target_type, suffix
@@ -226,7 +238,15 @@ def build_comparison_table(
         )
 
     for display_name, stem, model_key, target_type in DEEP_MODEL_ROWS:
-        append_row(rows, display_name, stem, model_key, target_type)
+        use_result_suffix = stem != CNN_STEM
+        append_row(
+            rows,
+            display_name,
+            stem,
+            model_key,
+            target_type,
+            use_result_suffix=use_result_suffix,
+        )
 
     return pd.DataFrame(rows)
 
@@ -300,6 +320,7 @@ def main() -> None:
         baselines_dir=args.baselines_dir,
         gru_results_dir=args.gru_results_dir,
         lstm_results_dir=args.lstm_results_dir,
+        cnn_results_dir=args.cnn_results_dir,
         dataset=args.dataset,
         result_suffix=args.result_suffix,
     )

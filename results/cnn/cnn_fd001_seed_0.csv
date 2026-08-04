@@ -1,0 +1,2 @@
+model,window_size,stride,num_features,batch_size,epochs,lr,early_stopping,early_stopping_patience,early_stopping_min_delta,restore_best,trained_epochs,best_epoch,best_val_rmse,best_val_mae,seed,device,train_rmse,train_mae,val_rmse,val_mae,checkpoint_path
+cnn,30,1,24,256,100,0.001,True,15,0.1,True,30,15,30.424824923375866,22.1265809908893,0,cuda,29.019742965698242,20.643657684326172,30.42482566833496,22.12657928466797,C:\learning\Projects\Sensor Time-Series Deep Learning Benchmark for Predictive Maintenance\results\cnn\cnn_fd001.pt
