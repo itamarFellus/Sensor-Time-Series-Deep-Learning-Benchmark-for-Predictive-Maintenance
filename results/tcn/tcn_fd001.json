@@ -1,0 +1,26 @@
+[
+  {
+    "model": "tcn",
+    "window_size": 30,
+    "stride": 1,
+    "num_features": 24,
+    "batch_size": 256,
+    "epochs": 100,
+    "lr": 0.0005,
+    "early_stopping": true,
+    "early_stopping_patience": 15,
+    "early_stopping_min_delta": 0.1,
+    "restore_best": true,
+    "trained_epochs": 57,
+    "best_epoch": 42,
+    "best_val_rmse": 25.95125870174677,
+    "best_val_mae": 18.680741886054975,
+    "seed": 42,
+    "device": "cuda",
+    "train_rmse": 34.93452453613281,
+    "train_mae": 21.979259490966797,
+    "val_rmse": 25.95125961303711,
+    "val_mae": 18.680742263793945,
+    "checkpoint_path": "C:\\learning\\Projects\\Sensor Time-Series Deep Learning Benchmark for Predictive Maintenance\\results\\tcn\\tcn_fd001.pt"
+  }
+]

@@ -6,6 +6,7 @@ import json
 import random
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
@@ -163,6 +164,80 @@ def predict_loader(
             predictions.append(batch_pred)
 
     return np.concatenate(predictions)
+
+
+def plot_binned_error_vs_true_rul(
+    predictions_df: pd.DataFrame,
+    output_dir: Path | str,
+    prefix: str,
+    split: str = "val",
+) -> None:
+    """Plot median prediction error by true-RUL bin with an interquartile range."""
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    split_df = predictions_df.loc[predictions_df["split"] == split].copy()
+
+    bin_edges = [0, 25, 50, 75, 100, 125, 150, 175, 200, np.inf]
+    bin_labels = [
+        "0-25",
+        "25-50",
+        "50-75",
+        "75-100",
+        "100-125",
+        "125-150",
+        "150-175",
+        "175-200",
+        "200+",
+    ]
+
+    split_df["rul_bin"] = pd.cut(
+        split_df["true_rul"],
+        bins=bin_edges,
+        labels=bin_labels,
+        include_lowest=True,
+        right=True,
+    )
+
+    medians: list[float] = []
+    q25s: list[float] = []
+    q75s: list[float] = []
+    labels: list[str] = []
+    for label in bin_labels:
+        errors = split_df.loc[split_df["rul_bin"] == label, "error"]
+        if errors.empty:
+            continue
+        labels.append(label)
+        medians.append(float(errors.median()))
+        q25s.append(float(errors.quantile(0.25)))
+        q75s.append(float(errors.quantile(0.75)))
+
+    if not labels:
+        return
+
+    x = np.arange(len(labels))
+    medians_arr = np.array(medians)
+    q25_arr = np.array(q25s)
+    q75_arr = np.array(q75s)
+
+    fig, ax = plt.subplots()
+    ax.axhline(0.0, linestyle="--", color="black", label="error = 0")
+    ax.fill_between(
+        x,
+        q25_arr,
+        q75_arr,
+        alpha=0.3,
+        label="IQR (25th-75th)",
+    )
+    ax.plot(x, medians_arr, marker="o", label="median error")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=45, ha="right")
+    ax.set_title(f"Binned prediction error vs true RUL ({split})")
+    ax.set_xlabel("true RUL bin")
+    ax.set_ylabel("error")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(out_dir / f"{prefix}_{split}_binned_error_vs_true_rul.png")
+    plt.close(fig)
 
 
 def print_summary(
@@ -394,6 +469,7 @@ def main() -> None:
     plot_training_history(history, plots_dir, plot_prefix)
     plot_predicted_vs_true(predictions_df, plots_dir, plot_prefix, split="val")
     plot_error_vs_true_rul(predictions_df, plots_dir, plot_prefix, split="val")
+    plot_binned_error_vs_true_rul(predictions_df, plots_dir, plot_prefix, split="val")
     plot_engine_trajectories(predictions_df, plots_dir, plot_prefix, split="val")
 
     print_summary(

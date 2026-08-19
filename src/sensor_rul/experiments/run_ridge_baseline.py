@@ -5,6 +5,7 @@ import argparse
 import json
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -109,6 +110,80 @@ def evaluate_ridge_baseline(
     return result, baseline
 
 
+def plot_binned_error_vs_true_rul(
+    predictions_df: pd.DataFrame,
+    output_dir: Path | str,
+    prefix: str,
+    split: str = "val",
+) -> None:
+    """Plot median prediction error by true-RUL bin with an interquartile range."""
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    split_df = predictions_df.loc[predictions_df["split"] == split].copy()
+
+    bin_edges = [0, 25, 50, 75, 100, 125, 150, 175, 200, np.inf]
+    bin_labels = [
+        "0-25",
+        "25-50",
+        "50-75",
+        "75-100",
+        "100-125",
+        "125-150",
+        "150-175",
+        "175-200",
+        "200+",
+    ]
+
+    split_df["rul_bin"] = pd.cut(
+        split_df["true_rul"],
+        bins=bin_edges,
+        labels=bin_labels,
+        include_lowest=True,
+        right=True,
+    )
+
+    medians: list[float] = []
+    q25s: list[float] = []
+    q75s: list[float] = []
+    labels: list[str] = []
+    for label in bin_labels:
+        errors = split_df.loc[split_df["rul_bin"] == label, "error"]
+        if errors.empty:
+            continue
+        labels.append(label)
+        medians.append(float(errors.median()))
+        q25s.append(float(errors.quantile(0.25)))
+        q75s.append(float(errors.quantile(0.75)))
+
+    if not labels:
+        return
+
+    x = np.arange(len(labels))
+    medians_arr = np.array(medians)
+    q25_arr = np.array(q25s)
+    q75_arr = np.array(q75s)
+
+    fig, ax = plt.subplots()
+    ax.axhline(0.0, linestyle="--", color="black", label="error = 0")
+    ax.fill_between(
+        x,
+        q25_arr,
+        q75_arr,
+        alpha=0.3,
+        label="IQR (25th-75th)",
+    )
+    ax.plot(x, medians_arr, marker="o", label="median error")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=45, ha="right")
+    ax.set_title(f"Binned prediction error vs true RUL ({split})")
+    ax.set_xlabel("true RUL bin")
+    ax.set_ylabel("error")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(out_dir / f"{prefix}_{split}_binned_error_vs_true_rul.png")
+    plt.close(fig)
+
+
 def print_summary(
     args: argparse.Namespace,
     train_engine_ids: np.ndarray,
@@ -186,7 +261,7 @@ def main() -> None:
     x_val = val_windows.windows
     y_val = val_windows.labels
 
-    result, _ = evaluate_ridge_baseline(
+    result, baseline = evaluate_ridge_baseline(
         x_train,
         y_train,
         x_val,
@@ -197,7 +272,35 @@ def main() -> None:
         alpha=args.alpha,
     )
 
+    y_train_pred = baseline.predict(x_train)
+    y_val_pred = baseline.predict(x_val)
+    predictions_df = pd.concat(
+        [
+            pd.DataFrame(
+                {
+                    "split": "train",
+                    "true_rul": y_train,
+                    "pred_rul": y_train_pred,
+                    "error": y_train_pred - y_train,
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "split": "val",
+                    "true_rul": y_val,
+                    "pred_rul": y_val_pred,
+                    "error": y_val_pred - y_val,
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+
     args.results_dir.mkdir(parents=True, exist_ok=True)
+    plot_prefix = "ridge_baseline_fd001"
+    plots_dir = args.results_dir / "plots"
+    plot_binned_error_vs_true_rul(predictions_df, plots_dir, plot_prefix, split="val")
+
     csv_path = args.results_dir / "ridge_baseline_fd001.csv"
     json_path = args.results_dir / "ridge_baseline_fd001.json"
 

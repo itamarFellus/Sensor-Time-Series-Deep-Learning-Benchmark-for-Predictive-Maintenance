@@ -19,17 +19,17 @@ BASELINE_ROWS: tuple[tuple[str, str, str], ...] = (
 
 DEEP_MODEL_ROWS: tuple[tuple[str, str, str, str], ...] = (
     ("MLP", "mlp_baseline", "mlp", "raw"),
-    ("MLP", "mlp_baseline", "mlp", "capped_125"),
     ("GRU", "gru", "gru", "raw"),
-    ("GRU", "gru_capped", "gru", "capped_125"),
     ("LSTM", "lstm", "lstm", "raw"),
-    ("LSTM", "lstm", "lstm", "capped_125"),
     ("CNN", "cnn", "cnn", "raw"),
+    ("TCN", "tcn", "tcn", "raw"),
 )
 
 GRU_STEM = "gru_capped"
 LSTM_STEM = "lstm"
 CNN_STEM = "cnn"
+TCN_STEM = "tcn"
+NO_RESULT_SUFFIX_STEMS = frozenset({CNN_STEM, TCN_STEM})
 GRU_RESULTS_STEMS = frozenset({"gru", GRU_STEM})
 TARGET_TYPE_STEMS = frozenset({"mlp_baseline", "gru", GRU_STEM, LSTM_STEM})
 
@@ -75,6 +75,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=PROJECT_ROOT / "results" / "cnn",
         help="Directory containing CNN result JSON files.",
+    )
+    parser.add_argument(
+        "--tcn-results-dir",
+        type=Path,
+        default=PROJECT_ROOT / "results" / "tcn",
+        help="Directory containing TCN result JSON files.",
     )
     parser.add_argument(
         "--tables-dir",
@@ -167,6 +173,7 @@ def results_dir_for_stem(
     gru_results_dir: Path,
     lstm_results_dir: Path,
     cnn_results_dir: Path,
+    tcn_results_dir: Path,
 ) -> Path:
     if stem in GRU_RESULTS_STEMS:
         return gru_results_dir
@@ -174,6 +181,8 @@ def results_dir_for_stem(
         return lstm_results_dir
     if stem == CNN_STEM:
         return cnn_results_dir
+    if stem == TCN_STEM:
+        return tcn_results_dir
     return baselines_dir
 
 
@@ -182,6 +191,7 @@ def build_comparison_table(
     gru_results_dir: Path,
     lstm_results_dir: Path,
     cnn_results_dir: Path,
+    tcn_results_dir: Path,
     dataset: str,
     result_suffix: str = "",
 ) -> pd.DataFrame:
@@ -212,7 +222,12 @@ def build_comparison_table(
     ) -> None:
         suffix = result_suffix if use_result_suffix else ""
         results_dir = results_dir_for_stem(
-            stem, baselines_dir, gru_results_dir, lstm_results_dir, cnn_results_dir
+            stem,
+            baselines_dir,
+            gru_results_dir,
+            lstm_results_dir,
+            cnn_results_dir,
+            tcn_results_dir,
         )
         source_path = result_path(
             results_dir, stem, dataset, target_type, suffix
@@ -238,7 +253,7 @@ def build_comparison_table(
         )
 
     for display_name, stem, model_key, target_type in DEEP_MODEL_ROWS:
-        use_result_suffix = stem != CNN_STEM
+        use_result_suffix = stem not in NO_RESULT_SUFFIX_STEMS
         append_row(
             rows,
             display_name,
@@ -321,6 +336,7 @@ def main() -> None:
         gru_results_dir=args.gru_results_dir,
         lstm_results_dir=args.lstm_results_dir,
         cnn_results_dir=args.cnn_results_dir,
+        tcn_results_dir=args.tcn_results_dir,
         dataset=args.dataset,
         result_suffix=args.result_suffix,
     )

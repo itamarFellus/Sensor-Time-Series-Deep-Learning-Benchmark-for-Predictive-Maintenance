@@ -1,4 +1,4 @@
-"""Run sequence-window GRU RUL baseline on FD001."""
+"""Run sequence-window TCN RUL baseline on FD001."""
 from __future__ import annotations
 
 import argparse
@@ -27,7 +27,7 @@ from sensor_rul.data.splits import (
 )
 from sensor_rul.data.windowing import make_windows
 from sensor_rul.evaluation.metrics import mae, rmse
-from sensor_rul.models.recurrent import GRURULRegressor
+from sensor_rul.models.TCN import TCNRULRegressor
 from sensor_rul.training.train_regressor import (
     DEFAULT_EARLY_STOPPING_MIN_DELTA,
     DEFAULT_EARLY_STOPPING_PATIENCE,
@@ -43,7 +43,7 @@ from sensor_rul.visualization.rul_diagnostics import (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run sequence-window GRU RUL baseline on FD001."
+        description="Run sequence-window TCN RUL baseline on FD001."
     )
     parser.add_argument(
         "--data-dir",
@@ -54,7 +54,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--results-dir",
         type=Path,
-        default=PROJECT_ROOT / "results" / "gru",
+        default=PROJECT_ROOT / "results" / "tcn",
         help="Directory for baseline result files.",
     )
     parser.add_argument(
@@ -68,18 +68,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=1,
         help="Stride between consecutive windows.",
-    )
-    parser.add_argument(
-        "--hidden-dim",
-        type=int,
-        default=64,
-        help="GRU hidden state size.",
-    )
-    parser.add_argument(
-        "--num-layers",
-        type=int,
-        default=1,
-        help="Number of stacked GRU layers.",
     )
     parser.add_argument(
         "--batch-size",
@@ -96,7 +84,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--lr",
         type=float,
-        default=1e-3,
+        default=0.5e-3,
         help="Adam learning rate.",
     )
     parser.add_argument(
@@ -238,6 +226,205 @@ def plot_binned_error_vs_true_rul(
     plt.close(fig)
 
 
+def _iter_diagnostic_weight_layers(
+    model: torch.nn.Module,
+) -> list[tuple[str, torch.nn.Module]]:
+    """Return Conv1d and Linear layers with trainable weights (no biases)."""
+    layers: list[tuple[str, torch.nn.Module]] = []
+    for name, module in model.named_modules():
+        if isinstance(module, (torch.nn.Conv1d, torch.nn.Linear)):
+            layers.append((name, module))
+    return layers
+
+
+def plot_weight_histograms(
+    model: torch.nn.Module,
+    output_dir: Path | str,
+    prefix: str,
+) -> None:
+    """Plot weight-value histograms for every Conv1d and Linear layer."""
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    layers = _iter_diagnostic_weight_layers(model)
+    if not layers:
+        return
+
+    n_layers = len(layers)
+    n_cols = min(3, n_layers)
+    n_rows = int(np.ceil(n_layers / n_cols))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows))
+    axes = np.atleast_1d(axes).ravel()
+
+    for ax, (name, module) in zip(axes, layers):
+        weights = module.weight.detach().cpu().numpy().ravel()
+        ax.hist(weights, bins=40, color="steelblue", edgecolor="white")
+        ax.set_title(name, fontsize=9)
+        ax.set_xlabel("weight")
+        ax.set_ylabel("count")
+
+    for ax in axes[n_layers:]:
+        ax.axis("off")
+
+    fig.suptitle("Weight distributions by layer", y=1.02)
+    fig.tight_layout()
+    fig.savefig(out_dir / f"{prefix}_weight_histograms.png", bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_weight_norms(
+    model: torch.nn.Module,
+    output_dir: Path | str,
+    prefix: str,
+) -> None:
+    """Plot Frobenius norms of Conv1d and Linear weight tensors by layer."""
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    layers = _iter_diagnostic_weight_layers(model)
+    if not layers:
+        return
+
+    names = [name for name, _ in layers]
+    norms = [
+        float(torch.linalg.norm(module.weight.detach()).item())
+        for _, module in layers
+    ]
+
+    x = np.arange(len(names))
+    fig, ax = plt.subplots(figsize=(max(8, len(names) * 0.8), 5))
+    ax.bar(x, norms, color="steelblue")
+    ax.set_xticks(x)
+    ax.set_xticklabels(names, rotation=45, ha="right", fontsize=8)
+    ax.set_title("Layer-wise weight Frobenius norms")
+    ax.set_xlabel("layer")
+    ax.set_ylabel("||W||")
+    fig.tight_layout()
+    fig.savefig(out_dir / f"{prefix}_weight_norms.png", bbox_inches="tight")
+    plt.close(fig)
+
+
+def _accumulate_squared_values(
+    storage: dict[str, float],
+    tensor: torch.Tensor,
+) -> None:
+    storage["sq_sum"] += float(tensor.detach().pow(2).sum().item())
+    storage["count"] += int(tensor.numel())
+
+
+def _rms_from_storage(storage: dict[str, float]) -> float:
+    if storage["count"] == 0:
+        return 0.0
+    return float(np.sqrt(storage["sq_sum"] / storage["count"]))
+
+
+def plot_residual_activation_magnitudes(
+    model: torch.nn.Module,
+    data_loader: DataLoader,
+    device: torch.device,
+    output_dir: Path | str,
+    prefix: str,
+    max_batches: int | None = None,
+) -> None:
+    """Plot RMS activation magnitudes for shortcut, main, and output per TCN block."""
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    blocks = [model.block1, model.block2, model.block3]
+    block_keys = ["Block 1", "Block 2", "Block 3"]
+    branch_keys = ("shortcut", "main", "output")
+    storage = {
+        block_key: {branch: {"sq_sum": 0.0, "count": 0} for branch in branch_keys}
+        for block_key in block_keys
+    }
+    handles: list[torch.utils.hooks.RemovableHandle] = []
+
+    for block, block_key in zip(blocks, block_keys):
+        if block.residual is not None:
+
+            def make_residual_hook(key: str):
+                def hook(
+                    _module: torch.nn.Module,
+                    _input: tuple[torch.Tensor, ...],
+                    output: torch.Tensor,
+                ) -> None:
+                    _accumulate_squared_values(storage[key]["shortcut"], output)
+
+                return hook
+
+            handles.append(block.residual.register_forward_hook(make_residual_hook(block_key)))
+        else:
+
+            def make_shortcut_pre_hook(key: str):
+                def hook(
+                    _module: torch.nn.Module,
+                    inputs: tuple[torch.Tensor, ...],
+                ) -> None:
+                    _accumulate_squared_values(storage[key]["shortcut"], inputs[0])
+
+                return hook
+
+            handles.append(
+                block.register_forward_pre_hook(make_shortcut_pre_hook(block_key))
+            )
+
+        def make_main_hook(key: str):
+            def hook(
+                _module: torch.nn.Module,
+                _input: tuple[torch.Tensor, ...],
+                output: torch.Tensor,
+            ) -> None:
+                _accumulate_squared_values(storage[key]["main"], output)
+
+            return hook
+
+        handles.append(block.conv2.register_forward_hook(make_main_hook(block_key)))
+
+        def make_output_hook(key: str):
+            def hook(
+                _module: torch.nn.Module,
+                _input: tuple[torch.Tensor, ...],
+                output: torch.Tensor,
+            ) -> None:
+                _accumulate_squared_values(storage[key]["output"], output)
+
+            return hook
+
+        handles.append(block.register_forward_hook(make_output_hook(block_key)))
+
+    model.eval()
+    with torch.no_grad():
+        for batch_idx, (batch_x, _) in enumerate(data_loader):
+            if max_batches is not None and batch_idx >= max_batches:
+                break
+            model(batch_x.to(device))
+
+    for handle in handles:
+        handle.remove()
+
+    branch_labels = ["shortcut", "residual branch", "block output"]
+    x = np.arange(len(block_keys))
+    width = 0.25
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for branch_idx, (branch_key, branch_label) in enumerate(
+        zip(branch_keys, branch_labels)
+    ):
+        values = [
+            _rms_from_storage(storage[block_key][branch_key])
+            for block_key in block_keys
+        ]
+        offsets = x + (branch_idx - 1) * width
+        ax.bar(offsets, values, width=width, label=branch_label)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(block_keys)
+    ax.set_title("Residual / activation RMS magnitude by TCN block")
+    ax.set_xlabel("TCN block")
+    ax.set_ylabel("RMS magnitude")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(out_dir / f"{prefix}_residual_activation_magnitudes.png")
+    plt.close(fig)
+
+
 def print_summary(
     args: argparse.Namespace,
     train_engine_ids: np.ndarray,
@@ -253,12 +440,10 @@ def print_summary(
     plots_dir: Path,
     plot_prefix: str,
 ) -> None:
-    print("Sequence-window GRU RUL baseline (FD001)")
+    print("Sequence-window TCN RUL baseline (FD001)")
     print(f"  data dir:       {args.data_dir}")
     print(f"  window size:    {args.window_size}")
     print(f"  stride:         {args.stride}")
-    print(f"  hidden dim:     {args.hidden_dim}")
-    print(f"  num layers:     {args.num_layers}")
     print(f"  batch size:     {args.batch_size}")
     print(f"  epochs:         {args.epochs}")
     print(f"  lr:             {args.lr}")
@@ -356,10 +541,9 @@ def main() -> None:
     )
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
 
-    model = GRURULRegressor(
+    model = TCNRULRegressor(
+        window_size=args.window_size,
         num_features=num_features,
-        hidden_dim=args.hidden_dim,
-        num_layers=args.num_layers,
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if device.type == "cuda":
@@ -373,7 +557,6 @@ def main() -> None:
         epochs=args.epochs,
         lr=args.lr,
         device=device,
-        grad_clip_max_norm=1.0,
         early_stopping_patience=(
             args.early_stop_patience if args.early_stopping else None
         ),
@@ -410,12 +593,10 @@ def main() -> None:
     predictions_df = pd.concat([train_predictions, val_predictions], ignore_index=True)
 
     result: dict[str, float | str | int | bool] = {
-        "model": "gru",
+        "model": "tcn",
         "window_size": args.window_size,
         "stride": args.stride,
         "num_features": num_features,
-        "hidden_dim": args.hidden_dim,
-        "num_layers": args.num_layers,
         "batch_size": args.batch_size,
         "epochs": args.epochs,
         "lr": args.lr,
@@ -435,7 +616,7 @@ def main() -> None:
         "val_mae": float(mae(y_val, y_val_pred)),
     }
 
-    output_stem = f"gru_fd001_hidden_dim_{args.hidden_dim}"
+    output_stem = f"tcn_fd001"
     plot_prefix = output_stem
     args.results_dir.mkdir(parents=True, exist_ok=True)
     plots_dir = args.results_dir / "plots"
@@ -466,6 +647,11 @@ def main() -> None:
     plot_error_vs_true_rul(predictions_df, plots_dir, plot_prefix, split="val")
     plot_binned_error_vs_true_rul(predictions_df, plots_dir, plot_prefix, split="val")
     plot_engine_trajectories(predictions_df, plots_dir, plot_prefix, split="val")
+    plot_weight_histograms(model, plots_dir, plot_prefix)
+    plot_weight_norms(model, plots_dir, plot_prefix)
+    plot_residual_activation_magnitudes(
+        model, val_loader, device, plots_dir, plot_prefix
+    )
 
     print_summary(
         args,

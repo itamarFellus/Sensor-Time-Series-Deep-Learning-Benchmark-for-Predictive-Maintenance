@@ -1,0 +1,26 @@
+[
+  {
+    "model": "cnn",
+    "window_size": 30,
+    "stride": 1,
+    "num_features": 24,
+    "batch_size": 256,
+    "epochs": 100,
+    "lr": 0.0005,
+    "early_stopping": true,
+    "early_stopping_patience": 15,
+    "early_stopping_min_delta": 0.1,
+    "restore_best": true,
+    "trained_epochs": 41,
+    "best_epoch": 26,
+    "best_val_rmse": 25.208837985553746,
+    "best_val_mae": 18.599648100239722,
+    "seed": 42,
+    "device": "cuda",
+    "train_rmse": 29.40040397644043,
+    "train_mae": 19.843584060668945,
+    "val_rmse": 25.208837509155273,
+    "val_mae": 18.599647521972656,
+    "checkpoint_path": "C:\\learning\\Projects\\Sensor Time-Series Deep Learning Benchmark for Predictive Maintenance\\results\\cnn\\cnn_fd001.pt"
+  }
+]

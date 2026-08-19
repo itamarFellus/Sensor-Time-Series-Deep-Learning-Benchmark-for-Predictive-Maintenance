@@ -17,9 +17,9 @@ class CNNRULRegressor(nn.Module):
     def __init__(self, window_size: int, num_features: int) -> None:
         super().__init__()
         self.conv1 = nn.Conv1d(
-            num_features, 32, kernel_size=7, stride=1, padding="same"
+            num_features, 32, kernel_size=9, stride=1, padding="same"
         )
-        self.conv2 = nn.Conv1d(32, 64, kernel_size=7, stride=1, padding="same")
+        self.conv2 = nn.Conv1d(32, 64, kernel_size=9, stride=1, padding="same")
         self.relu = nn.ReLU()
         self.flatten = nn.Flatten(start_dim=1)
         self.head = nn.Linear(64 * window_size, 1)

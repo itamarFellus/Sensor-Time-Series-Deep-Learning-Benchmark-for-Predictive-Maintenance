@@ -11,4 +11,4 @@ Validation metrics from saved experiment result files. Deep models use best-epoc
 | MLP | raw | 30.8972 | 21.0173 | 23.8568 | 18.0148 |
 | GRU | raw | 30.8147 | 17.5907 | 23.6389 | 16.6905 |
 | LSTM | raw | 33.5718 | 18.5196 | 24.7112 | 16.6915 |
-| CNN | raw | 30.4850 | 21.1053 | 26.3121 | 19.4448 |
+| CNN | raw | 29.4004 | 19.8436 | 25.2088 | 18.5996 |
